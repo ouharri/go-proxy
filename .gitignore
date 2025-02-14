@@ -13,4 +13,6 @@ logs
 go.work
 go.work.sum
 
+proxy
+
 .env
