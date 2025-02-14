@@ -1,0 +1,26 @@
+version: "3.8"
+name: proxy-app
+
+services:
+  proxy:
+    build: .
+    container_name: proxy-app
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./logs:/logs
+    environment:
+      - LOG_DIR=/logs
+      - LISTEN=${LISTEN}
+      - SERVERS=${SERVERS}
+    restart: always
+
+  log-watcher:
+    image: alpine:latest
+    container_name: log-watcher
+    command: tail -f /logs/proxy_log_*.txt
+    volumes:
+      - ./logs:/logs
+    depends_on:
+      - proxy
+    restart: always

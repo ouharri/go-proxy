@@ -1,0 +1,4 @@
+# Ignore the Go binary and other unnecessary files
+bin/
+*.log
+*.out
