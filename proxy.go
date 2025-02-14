@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"io"
@@ -119,6 +120,78 @@ func formatHexDump(data []byte) string {
 	return result.String()
 }
 
+func decodeProtocolData(data []byte) string {
+	if len(data) < 2 {
+		return fmt.Sprintf("Data too short: %X", data)
+	}
+
+	var decoded strings.Builder
+	decoded.WriteString("\n║ Protocol Decode:\n")
+
+	// Try to decode based on known protocol patterns
+	pos := 0
+	for pos < len(data) {
+		// Check for enough remaining bytes
+		if pos+4 > len(data) {
+			break
+		}
+
+		// Read potential header or field identifier
+		fieldType := binary.BigEndian.Uint16(data[pos : pos+2])
+
+		// Add field type interpretation
+		decoded.WriteString(fmt.Sprintf("║   Field Type: 0x%04X\n", fieldType))
+
+		// Read length if available
+		if pos+3 < len(data) {
+			length := uint8(data[pos+2])
+			decoded.WriteString(fmt.Sprintf("║   Length: %d bytes\n", length))
+
+			// Read value based on length
+			if pos+3+int(length) <= len(data) {
+				value := data[pos+3 : pos+3+int(length)]
+
+				// Try to interpret value based on length
+				switch length {
+				case 1:
+					decoded.WriteString(fmt.Sprintf("║   Value: %d (0x%02X)\n", value[0], value[0]))
+				case 2:
+					val := binary.BigEndian.Uint16(value)
+					decoded.WriteString(fmt.Sprintf("║   Value: %d (0x%04X)\n", val, val))
+				case 4:
+					val := binary.BigEndian.Uint32(value)
+					decoded.WriteString(fmt.Sprintf("║   Value: %d (0x%08X)\n", val, val))
+				default:
+					// Try to decode as string if printable
+					if isPrintable(value) {
+						decoded.WriteString(fmt.Sprintf("║   Value (ASCII): %s\n", string(value)))
+					} else {
+						decoded.WriteString(fmt.Sprintf("║   Value (HEX): %X\n", value))
+					}
+				}
+
+				decoded.WriteString("║   ----------------\n")
+				pos += 3 + int(length)
+			} else {
+				pos++
+			}
+		} else {
+			pos++
+		}
+	}
+
+	return decoded.String()
+}
+
+func isPrintable(data []byte) bool {
+	for _, b := range data {
+		if b < 32 || b > 126 {
+			return false
+		}
+	}
+	return true
+}
+
 func formatLogEntry(entry LogEntry) string {
 	rawMsg := strings.Map(func(r rune) rune {
 		if r < 32 || r > 126 {
@@ -126,6 +199,8 @@ func formatLogEntry(entry LogEntry) string {
 		}
 		return r
 	}, string(entry.Data))
+
+	decodedData := decodeProtocolData(entry.Data)
 
 	return fmt.Sprintf(
 		"\033[32m╔═══════════════════════════════════════════════════════════════════════════════\033[0m\n"+
@@ -136,6 +211,8 @@ func formatLogEntry(entry LogEntry) string {
 			"\033[32m╟───────────────────────────────────────────────────────────────────────────────\033[0m\n"+
 			"║ \033[1mRaw Message:\033[0m\n║ %s\n"+
 			"\033[32m╟───────────────────────────────────────────────────────────────────────────────\033[0m\n"+
+			"║ \033[1mDecoded Data:\033[0m%s\n"+
+			"\033[32m╟───────────────────────────────────────────────────────────────────────────────\033[0m\n"+
 			"║ \033[1mHex Dump:\033[0m\n%s"+
 			"\033[32m╚═══════════════════════════════════════════════════════════════════════════════\033[0m\n",
 		entry.ConnID,
@@ -143,6 +220,7 @@ func formatLogEntry(entry LogEntry) string {
 		entry.Timestamp.Format("2006-01-02 15:04:05.000"),
 		len(entry.Data),
 		rawMsg,
+		decodedData,
 		formatHexDump(entry.Data))
 }
 
